@@ -216,10 +216,10 @@ def main(args):
         elif args.subcommand == 'test':
             task = test(args)
         else:
-            task = None
+            parser.print_help()
+            return 0
 
-        if task is not None:
-            asyncio.run(task)
+        asyncio.run(task)
 
     except KeyboardInterrupt:
         pass
