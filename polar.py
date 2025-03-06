@@ -5,6 +5,9 @@ import asyncio
 import math
 import logging
 import contextlib
+import csv
+import time
+from pathlib import Path
 
 devices = {
     'Polar OH1 D025F429': 'A0:9E:1A:D0:25:F4',
@@ -41,7 +44,7 @@ async def discover(args):
                 print(f"Could not connect to device: {device}")
                 print(f"Error: {e}")
 
-def hr_data_conv(sender, data):
+def hr_data_conv(data):
     """
     `data` is formatted according to the GATT Characteristic and Object Type 0x2A37 Heart Rate Measurement which is one of the three characteristics included in the "GATT Service 0x180D Heart Rate".
     `data` can include the following bytes:
@@ -71,9 +74,12 @@ def hr_data_conv(sender, data):
         first_rr_byte += 1
 
     if energy_expenditure:
-        # ee = (data[first_rr_byte + 1] << 8) | data[first_rr_byte]
+        ee = (data[first_rr_byte + 1] << 8) | data[first_rr_byte]
         first_rr_byte += 2
+    else:
+        ee = None
 
+    ibis = []
     for i in range(first_rr_byte, len(data), 2):
         ibi = (data[i + 1] << 8) | data[i]
         # Polar H7, H9, and H10 record IBIs in 1/1024 seconds format.
@@ -81,10 +87,11 @@ def hr_data_conv(sender, data):
         # TODO: move conversion to model and only convert if sensor doesn't
         # transmit data in milliseconds.
         ibi = math.ceil(ibi / 1024 * 1000)
+        ibis.append(ibi)
 
-    print(f"{sender=} {rr_interval=} {hr=} {uint8_format=} {energy_expenditure=}\n")
+    return hr, ee, ibis
 
-async def record_from_device(device_name: str, lock: asyncio.Lock):
+async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name, subject: str = ""):
     try:
         async with contextlib.AsyncExitStack() as stack:
             async with lock:
@@ -102,26 +109,46 @@ async def record_from_device(device_name: str, lock: asyncio.Lock):
                 await stack.enter_async_context(client)
                 stack.callback(logging.info, "disconnecting from %s", device_name)
 
-            await client.start_notify(HEART_RATE_MEASUREMENT_UUID, hr_data_conv)
+            with open(csv_file_name, 'a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'subject', 'heartrate'])
+                writer.writeheader()
 
-            try:
-                while True:
-                    await asyncio.sleep(10)
-            except asyncio.CancelledError:
-                pass
+                def hr_data_dump(sender, data):
+                    hr, ee, ibis = hr_data_conv(data)
+
+                    writer.writerow({
+                        'timestamp': time.time(),
+                        'subject': subject,
+                        'heartrate': hr
+                    })
+
+                logging.info("recording subject %s", subject)
+                await client.start_notify(HEART_RATE_MEASUREMENT_UUID, hr_data_dump)
+
+                try:
+                    while True:
+                        await asyncio.sleep(10)
+                except asyncio.CancelledError:
+                    pass
+
+                await client.stop_notify(HEART_RATE_MEASUREMENT_UUID)
 
         logging.info("disconnected from %s", device_name)
     except Exception:
         logging.exception("error with %s", device_name)
 
-async def record(self):
-        lock = asyncio.Lock()
-        await asyncio.gather(
-            *(
-                record_from_device(device_name, lock)
-                for device_name in devices
-            )
+async def record(args):
+    subjects = args.subjects
+    phase = args.phase
+    output_folder = args.output_folder
+
+    lock = asyncio.Lock()
+    await asyncio.gather(
+        *(
+            record_from_device(device_name, lock, csv_file_name=output_folder / f"{subject}_{phase}.csv", subject=subject)
+            for (subject, device_name) in zip(subjects, devices)
         )
+    )
 
 PPG_SETTING = bytearray([0x01, #get settings
                          0x01]) #type PPG
@@ -162,7 +189,9 @@ def main(args):
     parser_test = subparsers.add_parser('test')
 
     parser_record = subparsers.add_parser('record')
-    parser_record.add_argument('--slot', type=int, default=1)
+    parser_record.add_argument('--subjects', "--sub", type=str, nargs='+', default=[])
+    parser_record.add_argument('--output_folder', type=Path, default=Path.cwd())
+    parser_record.add_argument('--phase', type=int, default=0)
 
     parser_read = subparsers.add_parser('read')
     parser_read.add_argument('uuid', type=str)
@@ -186,8 +215,12 @@ def main(args):
             task = read(args)
         elif args.subcommand == 'test':
             task = test(args)
+        else:
+            task = None
 
-        asyncio.run(task)
+        if task is not None:
+            asyncio.run(task)
+
     except KeyboardInterrupt:
         pass
 
