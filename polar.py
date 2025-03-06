@@ -12,6 +12,9 @@ from pathlib import Path
 devices = {
     'Polar OH1 D025F429': 'A0:9E:1A:D0:25:F4',
     'Polar OH1 6E85CB22': 'A0:9E:1A:6E:85:CB',
+    'Polar OH1 D025F429': 'A0:9E:1A:D0:25:F4',
+    'Polar OH1 84BF0B2D': 'A0:9E:1A:84:BF:0B',
+    'Polar OH1 6EFADA2E': 'A0:9E:1A:6E:FA:DA',
 }
 
 HEART_RATE_MEASUREMENT_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
