@@ -91,7 +91,7 @@ def hr_data_conv(data):
 
     return hr, ee, ibis
 
-async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name, subject: str = ""):
+async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name, properties = {}):
     try:
         async with contextlib.AsyncExitStack() as stack:
             async with lock:
@@ -110,7 +110,7 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
                 stack.callback(logging.info, "disconnecting from %s", device_name)
 
             with open(csv_file_name, 'a', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'subject', 'heartrate'])
+                writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'subject', 'phase', 'heartrate'])
                 writer.writeheader()
 
                 def hr_data_dump(sender, data):
@@ -118,11 +118,10 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
 
                     writer.writerow({
                         'timestamp': time.time(),
-                        'subject': subject,
                         'heartrate': hr
-                    })
+                    } | properties)
 
-                logging.info("recording subject %s", subject)
+                logging.info("recording from %s", device_name)
                 await client.start_notify(HEART_RATE_MEASUREMENT_UUID, hr_data_dump)
 
                 try:
@@ -145,7 +144,9 @@ async def record(args):
     lock = asyncio.Lock()
     await asyncio.gather(
         *(
-            record_from_device(device_name, lock, csv_file_name=output_folder / f"{subject}_{phase}.csv", subject=subject)
+            record_from_device(device_name, lock,
+                            csv_file_name=output_folder / f"{subject}_{phase}.csv",
+                            properties={'subject': subject, 'phase': phase})
             for (subject, device_name) in zip(subjects, devices)
         )
     )
@@ -191,7 +192,7 @@ def main(args):
     parser_record = subparsers.add_parser('record')
     parser_record.add_argument('--subjects', "--sub", type=str, nargs='+', default=[])
     parser_record.add_argument('--output_folder', type=Path, default=Path.cwd())
-    parser_record.add_argument('--phase', type=int, default=0)
+    parser_record.add_argument('--phase', type=str, default="0")
 
     parser_read = subparsers.add_parser('read')
     parser_read.add_argument('uuid', type=str)
