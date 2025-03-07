@@ -100,9 +100,9 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
     try:
         async with contextlib.AsyncExitStack() as stack:
             async with lock:
-                logging.info("scanning for %s", device_name)
+                logging.debug("scanning for %s", device_name)
                 device = await BleakScanner.find_device_by_name(device_name)
-                logging.info("stopped scanning for %s", device_name)
+                logging.debug("stopped scanning for %s", device_name)
 
                 if device is None:
                     logging.error("%s not found", device_name)
@@ -110,12 +110,12 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
 
                 client = BleakClient(device, timeout=100)
 
-                logging.info("connecting to %s", device_name)
+                logging.debug("connecting to %s", device_name)
                 await stack.enter_async_context(client)
                 stack.callback(logging.info, "disconnecting from %s", device_name)
 
             with open(csv_file_name, 'a', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=['device', 'subject', 'timestamp', 'phase', 'heartrate'])
+                writer = csv.DictWriter(csvfile, fieldnames=['device', 'subject', 'phase', 'timestamp', 'heartrate'])
                 writer.writeheader()
 
                 t0 = time.time()
@@ -139,7 +139,7 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
 
                 await client.stop_notify(HEART_RATE_MEASUREMENT_UUID)
 
-        logging.info("disconnected from %s", device_name)
+        logging.debug("disconnected from %s", device_name)
     except Exception:
         logging.exception("error with %s", device_name)
 
