@@ -182,26 +182,30 @@ async def read(args):
 
 async def check_battery(args):
     for (device_name, device_address) in devices.items():
-        logging.info("scanning for %s", device_name)
-        device = await BleakScanner.find_device_by_name(device_name)
-        logging.info("stopped scanning for %s", device_name)
+        try:
+            logging.debug("scanning for %s", device_name)
+            device = await BleakScanner.find_device_by_name(device_name)
+            logging.debug("stopped scanning for %s", device_name)
 
-        if device is None:
-            logging.error("%s not found", device_name)
-            return
+            if device is None:
+                logging.error("%s not found", device_name)
+                return
 
-        logging.info("connecting to %s", device_name)
+            logging.debug("connecting to %s", device_name)
 
-        async with BleakClient(device, timeout=100) as client:
-            response = await client.read_gatt_char(BATTERY_LEVEL_UUID)
-            level = response[0]
-            print(f"{device_name}: {level}")
+            async with BleakClient(device, timeout=100) as client:
+                response = await client.read_gatt_char(BATTERY_LEVEL_UUID)
+                level = response[0]
+                print(f"{device_name}: {level}")
 
-        logging.info("disconnected from %s", device_name)
+            logging.debug("disconnected from %s", device_name)
+        except Exception:
+            logging.exception("error with %s", device_name)
 
 def main(args):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--debug", action="store_true", help="sets the log level to debug")
+    parser.add_argument('-d', '--debug', help="Print lots of debugging statements", action="store_const", dest="loglevel", const=logging.DEBUG, default=logging.WARNING)
+    parser.add_argument('-v', '--verbose', help="Be verbose", action="store_const", dest="loglevel", const=logging.INFO)
 
     subparsers = parser.add_subparsers(title='subcommands',
                                        dest="subcommand",
@@ -222,9 +226,8 @@ def main(args):
 
     args = parser.parse_args(args=args)
 
-    log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
-        level=log_level,
+        level=args.loglevel,
         format="%(asctime)-15s %(name)-8s %(levelname)s: %(message)s",
     )
 
