@@ -8,6 +8,7 @@ import contextlib
 import csv
 import time
 from pathlib import Path
+from datetime import datetime
 
 devices = {
     'Polar OH1 85E77F28': '', # 1
@@ -96,7 +97,7 @@ def hr_data_conv(data):
 
     return hr, ee, ibis
 
-async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name, properties = {}):
+async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name, time0, properties = {}):
     try:
         async with contextlib.AsyncExitStack() as stack:
             async with lock:
@@ -115,15 +116,15 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
                 stack.callback(logging.info, "disconnecting from %s", device_name)
 
             with open(csv_file_name, 'a', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=['device', 'subject', 'phase', 'timestamp', 'heartrate'])
+                writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'device', 'subject', 'phase', 'time', 'heartrate'])
                 writer.writeheader()
 
-                t0 = time.time()
                 def hr_data_dump(sender, data):
                     hr, ee, ibis = hr_data_conv(data)
 
                     writer.writerow({
-                        'timestamp': time.time() - t0,
+                        'timestamp': datetime.now().isoformat(),
+                        'time': time.time() - time0,
                         'device': device_name,
                         'heartrate': hr
                     } | properties)
@@ -149,10 +150,13 @@ async def record(args):
     output_folder = args.output_folder
 
     lock = asyncio.Lock()
+    t0 = time.time()
+
     await asyncio.gather(
         *(
             record_from_device(device_name, lock,
                             csv_file_name=output_folder / f"{subject}_{phase}.csv",
+                            time0=t0,
                             properties={'subject': subject, 'phase': phase})
             for (subject, device_name) in zip(subjects, devices)
         )
