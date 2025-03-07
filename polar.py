@@ -170,11 +170,23 @@ async def read(args):
             print(f"{name}: {response}")
 
 async def check_battery(args):
-    for (name, device) in devices.items():
+    for (device_name, device_address) in devices.items():
+        logging.info("scanning for %s", device_name)
+        device = await BleakScanner.find_device_by_name(device_name)
+        logging.info("stopped scanning for %s", device_name)
+
+        if device is None:
+            logging.error("%s not found", device_name)
+            return
+
+        logging.info("connecting to %s", device_name)
+
         async with BleakClient(device, timeout=100) as client:
             response = await client.read_gatt_char(BATTERY_LEVEL_UUID)
             level = response[0]
-            print(f"{name}: {level}")
+            print(f"{device_name}: {level}")
+
+        logging.info("disconnected from %s", device_name)
 
 def main(args):
     parser = argparse.ArgumentParser()
