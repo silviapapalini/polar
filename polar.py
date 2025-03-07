@@ -115,14 +115,16 @@ async def record_from_device(device_name: str, lock: asyncio.Lock, csv_file_name
                 stack.callback(logging.info, "disconnecting from %s", device_name)
 
             with open(csv_file_name, 'a', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=['timestamp', 'subject', 'phase', 'heartrate'])
+                writer = csv.DictWriter(csvfile, fieldnames=['device', 'subject', 'timestamp', 'phase', 'heartrate'])
                 writer.writeheader()
 
+                t0 = time.time()
                 def hr_data_dump(sender, data):
                     hr, ee, ibis = hr_data_conv(data)
 
                     writer.writerow({
-                        'timestamp': time.time(),
+                        'timestamp': time.time() - t0,
+                        'device': device_name,
                         'heartrate': hr
                     } | properties)
 
